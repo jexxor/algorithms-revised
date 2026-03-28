@@ -35,11 +35,9 @@ void CountSort(std::vector<T>& arr) {
         return;
     }
 
-    auto [min, max] = [&arr]() {
-        auto [min_it, max_it] = std::minmax_element(arr.begin(), arr.end());
-        return std::make_pair(static_cast<std::uint64_t>(*min_it), static_cast<std::uint64_t>(*max_it));
-    }();
-
+    auto [min_it, max_it] = std::minmax_element(arr.begin(), arr.end());
+    auto min = static_cast<int64_t>(*min_it);
+    auto max = static_cast<int64_t>(*max_it);
 
     std::vector<std::uint64_t> count(max - min + 1, 0);
     for (const auto& x : arr) {

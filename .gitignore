@@ -1,0 +1,11 @@
+/build
+/build-*/
+/dist
+/dist-*/
+.cache
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.log

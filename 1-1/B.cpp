@@ -36,18 +36,18 @@ void CountSort(std::vector<T>& arr) {
     }
 
     auto [min_it, max_it] = std::minmax_element(arr.begin(), arr.end());
-    auto min = static_cast<int64_t>(*min_it);
-    auto max = static_cast<int64_t>(*max_it);
+    auto min = *min_it;
+    auto max = *max_it;
 
-    std::vector<std::uint64_t> count(max - min + 1, 0);
+    std::vector<std::uint64_t> count(static_cast<std::size_t>(max - min + 1), 0);
     for (const auto& x : arr) {
-        ++count[x - min];
+        ++count[static_cast<std::size_t>(x - min)];
     }
 
-    size_t index = 0;
-    for (size_t i = 0; i < count.size(); ++i) {
-        for (size_t j = 0; j < count[i]; ++j) {
-            arr[index++] = i + min;
+    std::size_t index = 0;
+    for (std::size_t i = 0; i < count.size(); ++i) {
+        for (std::size_t j = 0; j < count[i]; ++j) {
+            arr[index++] = static_cast<T>(min + static_cast<T>(i));
         }
     }
 }
@@ -59,7 +59,7 @@ int main() {
     std::ios_base::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
-    auto vector = countsort::io::ReadUntilEof<int>();
+    auto vector = countsort::io::ReadUntilEof<int64_t>();
     countsort::core::CountSort(vector);
     countsort::io::PrintVector(vector);
 

@@ -9,3 +9,6 @@
 *.dll
 *.exe
 *.log
+
+.vscode
+.idea

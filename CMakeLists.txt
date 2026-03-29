@@ -14,6 +14,25 @@ foreach(SOURCE ${SOURCES})
     add_executable(${TARGET_NAME} ${SOURCE})
 endforeach()
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror")
+add_compile_options(
+  -Wall
+  -Wextra
+  -Wpedantic
+  -Werror
+  -Wconversion
+  -Wsign-conversion
+  -Wfloat-conversion
+  -Wdouble-promotion
+  -g
+)
+
 set(CMAKE_CXX_FLAGS_ASAN "-fsanitize=address -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS_TSAN "-fsanitize=thread -fno-omit-frame-pointer")
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(
+    -Wimplicit-float-conversion
+    -Wshorten-64-to-32
+  )
+endif()
+

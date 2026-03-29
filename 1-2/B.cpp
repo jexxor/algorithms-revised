@@ -24,6 +24,14 @@ public:
         }
     }
 
+    void Push(T&& value) {
+        if (data_.empty() || data_.back().value != value) {
+            data_.push_back({1, std::move(value)});
+        } else {
+            ++data_.back().count;
+        }
+    }
+
     const T& Top() const {
         if (data_.empty()) {
             throw std::runtime_error("Stack is empty");

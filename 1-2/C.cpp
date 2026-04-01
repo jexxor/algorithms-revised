@@ -3,6 +3,7 @@
 #include <ios>
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -18,16 +19,21 @@ class OpenAddressingHashMap {
         V value;
         SlotState state{SlotState::Empty};
 
-        [[nodiscard]] explicit Slot(U&& key, W&& value)
+        Slot(U&& key, W&& value)
             : key(std::forward<U>(key)), value(std::forward<W>(value)), state(SlotState::Occupied) {
         }
+
+        Slot() = default;
     };
 
 public:
-    [[nodiscard]] explicit OpenAddressingHashMap(std::uint8_t power_of_two_size = kDefaultPowerOfTwoSize,
-                                               const Hash& hash = Hash(),
-                                               const KeyEqual& key_equal = KeyEqual())
-        : data_(1LL << power_of_two_size), mask_(data_.size() - 1), hash_(hash), key_equal_(key_equal) {
+    [[nodiscard]] explicit OpenAddressingHashMap(
+        std::uint8_t power_of_two_size = kDefaultPowerOfTwoSize, const Hash& hash = Hash(),
+        const KeyEqual& key_equal = KeyEqual())
+        : data_(1LL << power_of_two_size),
+          mask_(data_.size() - 1),
+          hash_(hash),
+          key_equal_(key_equal) {
     }
 
     OpenAddressingHashMap(const OpenAddressingHashMap&) = delete;
@@ -35,21 +41,104 @@ public:
     OpenAddressingHashMap(OpenAddressingHashMap&&) = delete;
     OpenAddressingHashMap& operator=(OpenAddressingHashMap&&) = delete;
 
+    [[nodiscard]] const V* Find(const K& key) const noexcept {
+        std::size_t index = AcquireSlot(key);
+        if (data_[index].state == SlotState::Occupied) {
+            return &data_[index].value;
+        }
+        return nullptr;
+    }
+
+    template <typename U, typename W>
+    void Insert(U&& key, W&& value) {
+        if (ShouldRehashNext()) {
+            Rehash();
+        }
+
+        std::size_t index = AcquireSlot(key);
+        if (data_[index].state != SlotState::Occupied) {
+            data_[index] = Slot(std::forward<U>(key), std::forward<W>(value));
+            ++size_;
+        } else {
+            data_[index].value = std::forward<W>(value);
+        }
+    }
+
+    bool Erase(const K& key) {
+        std::size_t index = AcquireSlot(key);
+        if (data_[index].state == SlotState::Occupied) {
+            data_[index].state = SlotState::Deleted;
+            if constexpr (!std::is_trivially_destructible_v<V>) {
+                data_[index].value = V{};
+            }
+
+            if constexpr (!std::is_trivially_destructible_v<K>) {
+                data_[index].key = K{};
+            }
+
+            --size_;
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool IsEmpty() const noexcept {
+        return size_ == 0;
+    }
+
 private:
-    std::size_t FindSlot(const K& key) const noexcept {
+    // if found, returns index of the slot with the key;
+    // otherwise, returns index of the first deleted slot or empty slot
+    [[nodiscard]] std::size_t AcquireSlot(const K& key) const noexcept {
         std::size_t index = hash_(key) & mask_;
+        std::optional<std::size_t> first_deleted;
+
         while (data_[index].state != SlotState::Empty) {
             if (data_[index].state == SlotState::Occupied && key_equal_(data_[index].key, key)) {
                 return index;
             }
+            if (data_[index].state == SlotState::Deleted && !first_deleted.has_value()) {
+                first_deleted = index;
+            }
             index = (index + 1) & mask_;
         }
-        return index;
+        return first_deleted.value_or(index);
+    }
+
+    void Rehash() {
+        std::vector<Slot<K, V>> old_data;
+        data_.swap(old_data);
+
+        std::size_t new_capacity = data_.size() * 2;
+        data_.resize(new_capacity);
+        mask_ = new_capacity - 1;
+
+        for (const auto& slot : old_data) {
+            if (slot.state == SlotState::Occupied) {
+                std::size_t index = hash_(slot.key) & mask_;
+
+                while (data_[index].state == SlotState::Occupied) {
+                    index = (index + 1) & mask_;
+                }
+
+                data_[index] = std::move(slot);
+            }
+        }
+    }
+
+    // LoadFactorAfterInsert = (size_ + 1) / data_.size() > 0.7, which is equivalent to
+    // 10 * (size_ + 1) > 7 * data_.size()
+    [[nodiscard]] bool ShouldRehashNext() const noexcept {
+        constexpr std::int64_t kThresholdNumerator{70};
+        constexpr std::int64_t kThresholdDenominator{100};
+
+        return (size_ + 1) * kThresholdDenominator > data_.size() * kThresholdNumerator;
     }
 
     static constexpr std::uint8_t kDefaultPowerOfTwoSize{8};
 
     std::vector<Slot<K, V>> data_;
+    std::size_t size_{0};
     std::size_t mask_;
     Hash hash_;
     KeyEqual key_equal_;
@@ -57,6 +146,17 @@ private:
 
 template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<>>
 class ChainHashMap {
+    struct Node {
+        Node* next{nullptr};
+        K key;
+        V value;
+
+        template <typename U, typename W>
+        Node(U&& key, W&& value, Node* next = nullptr)
+            : next(next), key(std::forward<U>(key)), value(std::forward<W>(value)) {
+        }
+    };
+
 public:
     [[nodiscard]] explicit ChainHashMap(std::size_t bucket_count = kDefaultBucketCount,
                                         const Hash& hash = Hash(),
@@ -132,18 +232,8 @@ public:
     }
 
 private:
-    struct Node {
-        Node* next{nullptr};
-        K key;
-        V value;
-
-        template <typename U, typename W>
-        [[nodiscard]] explicit Node(U&& key, W&& value, Node* next = nullptr)
-            : next(next), key(std::forward<U>(key)), value(std::forward<W>(value)) {
-        }
-    };
-
     static constexpr std::size_t kDefaultBucketCount{16};
+
     std::size_t size_{0};
     std::vector<Node*> buckets_;
     Hash hash_;
@@ -156,14 +246,14 @@ class LinkedQueue {
         NodeBase* next{this};
         NodeBase* prev{this};
 
-        [[nodiscard]] explicit NodeBase() = default;
+        NodeBase() = default;
     };
 
     struct Node : NodeBase {
         T data;
 
         template <typename U>
-        [[nodiscard]] explicit Node(U&& data) : data(std::forward<U>(data)) {
+        Node(U&& data) : data(std::forward<U>(data)) {
         }
     };
 

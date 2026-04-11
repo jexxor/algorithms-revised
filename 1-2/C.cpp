@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <ios>
 #include <iostream>
-#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -13,12 +12,12 @@ template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqua
 class OpenAddressingHashMap {
     enum class SlotState : std::uint8_t { Empty = 0, Occupied = 1, Deleted = 2 };
 
-    template <typename U, typename W>
     struct Slot {
         K key;
         V value;
         SlotState state{SlotState::Empty};
 
+        template <typename U, typename W>
         Slot(U&& key, W&& value)
             : key(std::forward<U>(key)), value(std::forward<W>(value)), state(SlotState::Occupied) {
         }
@@ -106,10 +105,10 @@ private:
     }
 
     void Rehash() {
-        std::vector<Slot<K, V>> old_data;
-        data_.swap(old_data);
-
         std::size_t new_capacity = data_.size() * 2;
+        std::vector<Slot> old_data;
+        
+        data_.swap(old_data);
         data_.resize(new_capacity);
         mask_ = new_capacity - 1;
 
@@ -129,15 +128,15 @@ private:
     // LoadFactorAfterInsert = (size_ + 1) / data_.size() > 0.7, which is equivalent to
     // 10 * (size_ + 1) > 7 * data_.size()
     [[nodiscard]] bool ShouldRehashNext() const noexcept {
-        constexpr std::int64_t kThresholdNumerator{70};
+        constexpr std::int64_t kThresholdNumerator{60};
         constexpr std::int64_t kThresholdDenominator{100};
 
         return (size_ + 1) * kThresholdDenominator > data_.size() * kThresholdNumerator;
     }
 
-    static constexpr std::uint8_t kDefaultPowerOfTwoSize{8};
+    static constexpr std::uint8_t kDefaultPowerOfTwoSize{16};
 
-    std::vector<Slot<K, V>> data_;
+    std::vector<Slot> data_;
     std::size_t size_{0};
     std::size_t mask_;
     Hash hash_;
@@ -369,7 +368,7 @@ public:
     }
 
 private:
-    static constexpr std::uint8_t kDefaultPowerOfTwoSize{8};
+    static constexpr std::uint8_t kDefaultPowerOfTwoSize{16};
 
     // 2^k - 1 elements stored
     std::vector<T> buffer_;
@@ -382,11 +381,186 @@ private:
     std::size_t tail_{0};
 };
 
+template <typename T>
+class CircularDeque {
+public:
+    [[nodiscard]] explicit CircularDeque(std::uint8_t power_of_two_size = kDefaultPowerOfTwoSize)
+        : buffer_(1LL << power_of_two_size), mask_(buffer_.size() - 1) {
+    }
+
+    [[nodiscard]] bool IsEmpty() const noexcept {
+        return head_ == tail_;
+    }
+
+    [[nodiscard]] std::size_t Size() const noexcept {
+        return (tail_ - head_) & mask_;
+    }
+
+    template <typename U>
+    void PushTail(U&& value) {
+        buffer_[tail_] = std::forward<U>(value);
+        tail_ = (tail_ + 1) & mask_;
+        if (tail_ == head_) {
+            ResizeFull();
+        }
+    }
+
+    template <typename U>
+    void PushHead(U&& value) {
+        head_ = (head_ + mask_) & mask_;
+        buffer_[head_] = std::forward<U>(value);
+        if (tail_ == head_) {
+            ResizeFull();
+        }
+    }
+
+    [[nodiscard]] const T& Front() const {
+        if (IsEmpty()) {
+            throw std::runtime_error("Deque is empty");
+        }
+        return buffer_[head_];
+    }
+
+    [[nodiscard]] const T& Back() const {
+        if (IsEmpty()) {
+            throw std::runtime_error("Deque is empty");
+        }
+        return buffer_[(tail_ + mask_) & mask_];
+    }
+
+    void PopHead() {
+        if (IsEmpty()) {
+            throw std::runtime_error("Deque is empty");
+        }
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            buffer_[head_] = T{};
+        }
+
+        head_ = (head_ + 1) & mask_;
+    }
+
+    void PopTail() {
+        if (IsEmpty()) {
+            throw std::runtime_error("Deque is empty");
+        }
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            buffer_[(tail_ + mask_) & mask_] = T{};
+        }
+
+        tail_ = (tail_ + mask_) & mask_;
+    }
+
+private:
+    void ResizeFull() {
+        std::vector<T> new_buffer(buffer_.size() * 2);
+        std::size_t new_mask = new_buffer.size() - 1;
+
+        for (std::size_t i = 0; i < buffer_.size(); ++i) {
+            new_buffer[i] = std::move(buffer_[(head_ + i) & mask_]);
+        }
+
+        buffer_.swap(new_buffer);
+        mask_ = new_mask;
+        head_ = 0;
+        tail_ = buffer_.size() / 2;
+    }
+
+    static constexpr std::uint8_t kDefaultPowerOfTwoSize{16};
+
+    // 2^k - 1 elements stored
+    std::vector<T> buffer_;
+
+    std::size_t mask_;
+    std::size_t head_{0};
+    std::size_t tail_{0};
+};
+
 }  // namespace data_struct
+
+namespace astrocity_solution {
+enum class EventType : std::uint8_t {
+    PushTail = 1,
+    PopHead = 2,
+    PopTail = 3,
+    DistanceFromHead = 4,
+    GetHead = 5
+};
+
+std::istream& operator>>(std::istream& is, EventType& event_type) {
+    std::int32_t event_type_value;
+    if (is >> event_type_value) {
+        event_type = static_cast<EventType>(event_type_value);
+    }
+    return is;
+}
+
+void HandleInput() {
+    std::size_t events_count{};
+    std::cin >> events_count;
+
+    using IdenifierType = std::size_t;
+    data_struct::CircularDeque<IdenifierType> deque;
+    data_struct::OpenAddressingHashMap<IdenifierType, std::size_t> positions;
+
+    struct {
+        std::size_t tail_clock{};
+        std::size_t head_clock{};
+    } state;
+
+    for (std::size_t i = 0; i < events_count; ++i) {
+        EventType event_type{};
+        std::cin >> event_type;
+
+        switch (event_type) {
+            case EventType::PushTail: {
+                IdenifierType identifier;
+                std::cin >> identifier;
+                deque.PushTail(identifier);
+                positions.Insert(identifier, state.tail_clock++);
+                break;
+            }
+            case EventType::PopHead: {
+                positions.Erase(deque.Front());
+                deque.PopHead();
+                ++state.head_clock;
+                break;
+            }
+            case EventType::PopTail: {
+                positions.Erase(deque.Back());
+                deque.PopTail();
+                --state.tail_clock;
+                break;
+            }
+            case EventType::DistanceFromHead: {
+                IdenifierType identifier;
+                std::cin >> identifier;
+
+                const std::size_t* position = positions.Find(identifier);
+
+                if (position == nullptr) {
+                    throw std::runtime_error("Identifier not found");
+                }
+
+                std::size_t distance = *position - state.head_clock;
+                std::cout << distance << '\n';
+                break;
+            }
+            case EventType::GetHead: {
+                std::cout << deque.Front() << '\n';
+                break;
+            }
+        }
+    }
+}
+
+}  // namespace astrocity_solution
 
 int main() {
     std::ios_base::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
+    astrocity_solution::HandleInput();
     return 0;
 }

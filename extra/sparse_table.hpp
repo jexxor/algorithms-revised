@@ -11,9 +11,9 @@
 namespace sparse_table {
 
 template <typename T, std::convertible_to<T> Op = std::less<>>
-class [[nodiscard]] SparseTable {
+class SparseTable {
 public:
-    explicit SparseTable(std::vector<T> data, const Op& op = Op{})
+    [[nodiscard]] explicit SparseTable(std::vector<T> data, const Op& op = Op{})
         : data_size_(data.size()), op_(op) {
         if (data.empty()) {
             throw std::invalid_argument("Data cannot be empty");

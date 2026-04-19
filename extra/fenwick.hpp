@@ -9,9 +9,9 @@ namespace fenwick_tree {
 
 template <typename T, std::size_t Dims>
     requires(Dims > 0 && std::is_arithmetic_v<T>)
-class [[nodiscard]] FenwickTree {
+class FenwickTree {
 public:
-    explicit FenwickTree(const std::array<std::size_t, Dims>& sizes) : sizes_(sizes) {
+    [[nodiscard]] explicit FenwickTree(const std::array<std::size_t, Dims>& sizes) : sizes_(sizes) {
         std::size_t total_size = 1;
         for (auto size : sizes) {
             total_size *= (size + 1);

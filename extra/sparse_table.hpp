@@ -6,10 +6,11 @@
 #include <iterator>
 #include <stdexcept>
 #include <vector>
+#include <concepts>
 
 namespace sparse_table {
 
-template <typename T, typename Op = std::less<>>
+template <typename T, std::convertible_to<T> Op = std::less<>>
 class [[nodiscard]] SparseTable {
 public:
     explicit SparseTable(std::vector<T> data, const Op& op = Op{})
@@ -30,8 +31,8 @@ public:
 
             for (std::size_t i = 0; i < data_size_; ++i) {
                 if (i + step < data_size_) {
-                    table_.push_back(Select(table_[previous_offset + i],
-                                             table_[previous_offset + i + step]));
+                    table_.push_back(
+                        Select(table_[previous_offset + i], table_[previous_offset + i + step]));
                 } else {
                     table_.push_back(table_[previous_offset + i]);
                 }

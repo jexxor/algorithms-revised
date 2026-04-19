@@ -500,9 +500,9 @@ void HandleInput() {
     std::size_t events_count{};
     std::cin >> events_count;
 
-    using IdenifierType = std::size_t;
-    data_struct::CircularDeque<IdenifierType> deque;
-    data_struct::OpenAddressingHashMap<IdenifierType, std::size_t> positions;
+    using IdentifierType = std::size_t;
+    data_struct::CircularDeque<IdentifierType> deque;
+    data_struct::OpenAddressingHashMap<IdentifierType, std::size_t> positions;
 
     struct {
         std::size_t tail_clock{};
@@ -515,7 +515,7 @@ void HandleInput() {
 
         switch (event_type) {
             case EventType::PushTail: {
-                IdenifierType identifier;
+                IdentifierType identifier;
                 std::cin >> identifier;
                 deque.PushTail(identifier);
                 positions.Insert(identifier, state.tail_clock++);
@@ -534,7 +534,7 @@ void HandleInput() {
                 break;
             }
             case EventType::DistanceFromHead: {
-                IdenifierType identifier;
+                IdentifierType identifier;
                 std::cin >> identifier;
 
                 const std::size_t* position = positions.Find(identifier);

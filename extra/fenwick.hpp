@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <vector>
+#include <type_traits>
 
 namespace fenwick_tree {
 
@@ -18,7 +19,7 @@ public:
 
         tree_.assign(total_size, T{});
         strides_.back() = 1;
-        for (std::size_t i = Dims - 1; i > 0; --i) {
+        for (std::size_t i = Dims - 1; i-- > 0;) {
             strides_[i - 1] = strides_[i] * (sizes_[i] + 1);
         }
     }

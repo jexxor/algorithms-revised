@@ -19,7 +19,8 @@ public:
 
         tree_.assign(total_size, T{});
         strides_.back() = 1;
-        for (std::size_t i = Dims - 1; i-- > 0;) {
+
+		for (std::size_t i = Dims - 1; i > 0; --i) {
             strides_[i - 1] = strides_[i] * (sizes_[i] + 1);
         }
     }

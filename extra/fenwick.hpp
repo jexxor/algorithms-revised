@@ -36,9 +36,6 @@ public:
     }
 
     [[nodiscard]] T Query(std::array<std::size_t, Dims> coords) const {
-        for (auto& index : coords) {
-            ++index;
-        }
         return QueryImpl<0>(0, coords);
     }
 

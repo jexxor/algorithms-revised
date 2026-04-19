@@ -1,73 +1,91 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
 namespace fenwick_tree {
 
-template <typename T, std::size_t Dims = 1>
-    requires(Dims > 1)
+template <typename T, std::size_t Dims>
 class [[nodiscard]] FenwickTree {
-private:
-    using SubTree = FenwickTree<T, Dims - 1>;
-    std::vector<SubTree> tree_{};
+    static_assert(Dims > 0, "Fenwick tree must have at least one dimension");
 
 public:
-    template <typename... Args>
-    explicit FenwickTree(std::size_t size, Args&&... args)
-        : tree_(size + 1, SubTree(std::forward<Args>(args)...)) {
-    }
+    explicit FenwickTree(const std::array<std::size_t, Dims>& sizes) : sizes_(sizes) {
+        std::size_t total_size = 1;
+        for (auto size : sizes) {
+            total_size *= (size + 1);
+        }
 
-    template <typename... Args>
-    void Add(std::size_t index, Args&&... args) {
-        for (++index; index < tree_.size(); index += LSB(index)) {
-            tree_[index].Add(std::forward<Args>(args)...);
+        tree_.assign(total_size, T{});
+        strides_[Dims - 1] = 1;
+        for (std::size_t i = Dims - 1; i > 0; --i) {
+            strides_[i - 1] = strides_[i] * (sizes_[i] + 1);
         }
     }
 
     template <typename... Args>
-    [[nodiscard]] T PrefixSum(std::size_t index, Args&&... args) const {
+    void Update(const T& delta, Args... args) {
+        static_assert(sizeof...(Args) == Dims,
+                      "Number of indices must match the number of dimensions");
+        Update({static_cast<std::size_t>(args)...}, delta);
+    }
+
+    void Update(std::array<std::size_t, Dims> indices, const T& delta) {
+        for (auto& index : indices) {
+            ++index;
+        }
+        RecursiveUpdate(0, 0, indices, delta);
+    }
+
+    template <typename... Args>
+    [[nodiscard]] T Query(Args... args) const {
+        static_assert(sizeof...(Args) == Dims,
+                      "Number of indices must match the number of dimensions");
+        return Query({static_cast<std::size_t>(args)...});
+    }
+
+    [[nodiscard]] T Query(std::array<std::size_t, Dims> indices) const {
+        for (auto& index : indices) {
+            ++index;
+        }
+        return RecursiveQuery(0, 0, indices);
+    }
+
+private:
+    static constexpr std::size_t LSB(std::size_t x) noexcept {
+        return x & (~x + 1);
+    }
+
+    T RecursiveQuery(std::size_t dims, std::size_t offset,
+                     std::array<std::size_t, Dims>& coords) const {
+        if (dims == Dims) {
+            return tree_[offset];
+        }
+
         T result{};
-        for (++index; index > 0; index -= LSB(index)) {
-            result += tree_[index].PrefixSum(std::forward<Args>(args)...);
+        for (std::size_t i = coords[dims]; i > 0; i -= LSB(i)) {
+            result += RecursiveQuery(dims + 1, offset + strides_[dims] * i, coords);
         }
+
         return result;
     }
 
-private:
-    [[nodiscard]] constexpr static std::size_t LSB(std::size_t x) noexcept {
-        return x & (~x + 1);
-    }
-};
+    void RecursiveUpdate(std::size_t dims, std::size_t offset,
+                         std::array<std::size_t, Dims>& coords, const T& delta) {
+        if (dims == Dims) {
+            tree_[offset] += delta;
+            return;
+        }
 
-template <typename T>
-class [[nodiscard]] FenwickTree<T, 1> {
-private:
+        for (std::size_t i = coords[dims]; i < sizes_[dims] + 1; i += LSB(i)) {
+            RecursiveUpdate(dims + 1, offset + strides_[dims] * i, coords, delta);
+        }
+    }
+
     std::vector<T> tree_{};
-
-public:
-    explicit FenwickTree(std::size_t size) : tree_(size + 1, T{}) {
-    }
-
-    template <typename U>
-    void Add(std::size_t index, U&& value) {
-        for (++index; index < tree_.size(); index += LSB(index)) {
-            tree_[index] += std::forward<U>(value);
-        }
-    }
-
-    [[nodiscard]] T PrefixSum(std::size_t index) const {
-        T result{};
-        for (++index; index > 0; index -= LSB(index)) {
-            result += tree_[index];
-        }
-        return result;
-    }
-
-private:
-    [[nodiscard]] constexpr static std::size_t LSB(std::size_t x) noexcept {
-        return x & (~x + 1);
-    }
+    std::array<std::size_t, Dims> sizes_{};
+    std::array<std::size_t, Dims> strides_{};
 };
 
 }  // namespace fenwick_tree
